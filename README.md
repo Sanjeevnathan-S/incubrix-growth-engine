@@ -1,12 +1,13 @@
-# Incrubrix: Growth Assessment
+# IncuBrix: Growth Assessment Engine
 
- A high-throughput, quota-resilient lead generation engine engineered for zero-budget constraints. It bypasses strict API rate limits (RPM/RPD) using multi-key LLM rotation, zero-quota RSS web-scraping fallbacks, thread-safe SQLite caching, and automated content bottleneck analysis.
+ A high-throughput, quota-resilient lead generation engine engineered for zero-budget constraints. It bypasses strict API rate limits (RPM/RPD) using multi-key LLM rotation, zero-quota RSS web-scraping fallbacks, SQLite query deduplication, and automated content bottleneck analysis.
 
 ---
 
  ## 1\. Quick Start & Setup
 
-```
+````
+```bash
 # Clone the repository
 git clone https://github.com/Sanjeevnathan-S/incubrix-growth-engine.git
 cd incubrix-growth-engine
@@ -22,27 +23,23 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Configure environment variables (.env)
-# GEMINI_API_KEY_1=your_key_1
-# GEMINI_API_KEY_2=your_key_2
-# GEMINI_API_KEY_3=your_key_3
-# YOUTUBE_API_KEY=your_key
 ```
+````
 
 ---
 
  ## 2\. Project Architecture
 
-```
+````
+```text
 incubrix-lead-pipeline/
 ├── config/
-│   └── settings.py              # Global settings, 7 target GEOs, API key rotation configs
+│   └── settings.py          # Global settings, 7 target GEOs, API key rotation configs
 ├── data/
-│   ├── cache.db                 # SQLite DB (WAL mode) for search & RSS feed TTL caching
-│   └── processed/               # Export directory
-│       ├── leads.csv            # Formatted CSV lead exports
-│       └── leads.xlsx           # Excel workbook exports
+│   ├── cache.db             # SQLite DB for lead storage & search history deduplication
+│   └── processed/           # Export directory
+│       ├── leads.csv        # Formatted CSV lead exports
+│       └── leads.xlsx       # Excel workbook exports
 ├── src/
 │   ├── discovery/
 │   │   ├── podcast_client.py    # Apple Podcasts API client across 7 country endpoints
@@ -60,27 +57,30 @@ incubrix-lead-pipeline/
 │       └── db.py                # Main lead database & country ratio window filters
 ├── main.py                      # Master pipeline orchestration loop & interrupt handler
 └── README.md                    # System documentation
+
 ```
+````
 
 ---
 
  ## 3\. System Architecture & Workflow
 
-```
+````
+```text
                            +------------------------+
                            | Target Search Query    |
                            +------------------------+
                                        |
                                        v
                        +--------------------------------+
-                       | SQLite TTL Cache Check         |
+                       | 30-Day Query TTL Check         |
                        | (data/cache.db)                |
                        +--------------------------------+
                           /                          \
                  [Hit]   /                            \  [Miss]
                         v                              v
          +----------------------------+   +------------------------------------+
-         | Return Cached Candidates   |   | Discovery Layer (7 Target GEOs)    |
+         | Skip Query Execution       |   | Discovery Layer (7 Target GEOs)    |
          +----------------------------+   |  1. Apple Podcasts API             |
                                           |  2. YouTube Data API (If quota OK) |
                                           |  3. Scrapetube + Parallel RSS      |
@@ -102,10 +102,12 @@ incubrix-lead-pipeline/
                                                            |
                                                            v
                                           +------------------------------------+
-                                          | Storage & Country Ratio Filter     |
+                                          | SQLite Persistence & Tier-1 Filter |
                                           | Exports to CSV & XLSX on SIGINT    |
                                           +------------------------------------+
+
 ```
+````
 
 ---
 
@@ -113,38 +115,23 @@ incubrix-lead-pipeline/
 
  ### 1\. Multi-Key Gemini Rotation (`llm_classifier.py`)
 
- To maximize processing throughput under Free-Tier Resource Per Day (RPD) and Requests Per Minute (RPM) constraints, the pipeline cycles across 3 separate Gemini API keys.
-
- If Key 1 triggers a `429 Rate Limit Exceeded` or `404 Service Unavailable` response, the classifier dynamically shifts active execution to Key 2 or Key 3 without dropping pipeline state.
+ To maximize processing throughput under Free-Tier Resource Per Day (RPD) and Requests Per Minute (RPM) constraints, the pipeline cycles across 3 separate Gemini API keys. If Key 1 triggers a `429 Rate Limit Exceeded` or `404 Service Unavailable` response, the classifier dynamically shifts active execution to Key 2 or Key 3 without dropping pipeline state.
 
  ### 2\. Zero-Quota Scrapetube & RSS Fallback (`scrapetube_client.py`)
 
- When official YouTube Data API quotas deplete to 0, discovery automatically falls back to `scrapetube` combined with multithreaded RSS parsing using `ThreadPoolExecutor`.
+ When official YouTube Data API quotas deplete to 0, discovery automatically falls back to `scrapetube` combined with multithreaded RSS parsing using `ThreadPoolExecutor`. This retrieves channel metadata and recent uploads without consuming official YouTube Data API credits.
 
- This retrieves channel metadata and recent uploads without consuming official YouTube Data API credits.
+ ### 3\. SQLite Query Deduplication & Retention (`db.py`)
 
- ### 3\. SQLite Concurrent Caching (`data/cache.db`)
-
- Integrated with:
-
-```
-PRAGMA journal_mode=WAL;
-```
-
- This enables non-blocking concurrent reads/writes across background threads.
-
- #### Cache TTLs
-
- - **Search Cache:** 24-hour TTL to prevent re-scraping identical search terms across country endpoints.
-- **RSS Cache:** 12-hour TTL to store channel XML payloads locally and eliminate repeated network fetches.
+ - **30-Day Query TTL:** Caches executed search terms in `search_history` with a 30-day TTL window to avoid redundant API queries across repeated discovery cycles.
+- **90-Day Stale Purging:** Automatically purges non-qualified candidates older than 90 days (`clear_stale_disqualifications`) while permanently retaining qualified lead profiles.
+- **Geographic & Ratio Filters:** Enforces export balance rules during candidate retrieval (`export_all_qualified`), capping single-country dominance at $\\le 60%$ and guaranteeing $\\ge 80%$ aggregate Tier-1 English market distribution.
 
 ---
 
  ## 5\. Performance Benchmarks
 
- Metrics were calculated across execution runs targeting 7 country regions:
-
- `US`, `CA`, `GB`, `IE`, `AU`, `NZ`, `SG`
+ Metrics calculated across execution runs targeting 7 country regions (`US`, `CA`, `GB`, `IE`, `AU`, `NZ`, `SG`):
 
  | Discovery Engine | Quota Cost | Avg Latency / Geo | Lead Yield / Query | Memory Footprint |
 | --- | --- | --- | --- | --- |
@@ -160,71 +147,70 @@ PRAGMA journal_mode=WAL;
 
  ### Run Standard Discovery Loop
 
-```
+````
+```bash
 python main.py
+
 ```
+````
 
  ### Safe Interrupt & Export (`Ctrl+C`)
 
- The main loop registers standard system signals (`SIGINT`).
+ The main loop registers standard system signals (`SIGINT`). Pressing `Ctrl+C` halts active processing safely and immediately executes `src/export/exporter.py`. All qualified leads gathered up to that point are preserved and exported to:
 
- Pressing `Ctrl+C` halts active processing safely and immediately executes:
-
-```
-src/export/exporter.py
-```
-
- All qualified leads gathered up to that point are preserved and exported to:
-
-```
-data/processed/leads.csv
-data/processed/leads.xlsx
-```
+ - `data/processed/leads.csv`
+- `data/processed/leads.xlsx`
 
 ---
 
  ## 7\. Failure Analysis & Risk Mitigations
 
-```
-                       Failure Point & Engineering Solution
+````
+```text
+                        Failure Point & Engineering Solution
 
-    Detected Issue                Root Cause                       Pipeline Mitigation
+    Detected Issue                Root Cause                 Pipeline Mitigation
 ┌──────────────────────┐    ┌───────────────────────────┐    ┌────────────────────────────┐
 │ API Quota Exhaustion │ ──►│ Single API Key Exceeding  │ ──►│ Automatic key-rotation     │
 │ (429 Rate Limit)     │    │ Free-Tier Daily Quotas    │    │ (3x Gemini Keys)           │
 └──────────────────────┘    └───────────────────────────┘    └────────────────────────────┘
 
 ┌──────────────────────┐    ┌───────────────────────────┐    ┌────────────────────────────┐
-│ Missing Contact Email│ ──►│ Hidden or unlisted creator │ ──►│ Bio regex + RSS XML        │
+│ Missing Contact Email│ ──►│ Hidden or unlisted creator│ ──►│ Bio regex + RSS XML        │
 │ in API Metadata      │    │ business emails           │    │ landing page scraping      │
 └──────────────────────┘    └───────────────────────────┘    └────────────────────────────┘
 
 ┌──────────────────────┐    ┌───────────────────────────┐    ┌────────────────────────────┐
-│ SQLite Locks during  │ ──►│ Simultaneous multithread  │ ──►│ Enabled WAL Mode &         │
-│ Parallel RSS Fetch   │    │ database writes           │    │ connection timeout flags   │
+│ Redundant Discovery  │ ──►│ Repeated execution of     │ ──►│ 30-day query TTL check     │
+│ Calls Across Runs    │    │ identical search queries  │    │ via SQLite search_history   │
 └──────────────────────┘    └───────────────────────────┘    └────────────────────────────┘
+
 ```
+````
 
 ---
 
  ## 8\. Development Roadmap
 
-```
-                                  Product Roadmap
+````
+```text
+                                Product Roadmap
 
     Phase 1 (Current)                Phase 2 (Near-Term)            Phase 3 (Scale)
 ┌─────────────────────────┐      ┌─────────────────────────┐    ┌─────────────────────────┐
 │ • Apple + YouTube API   │ ───► │ • Async HTTP Engine     │ ──►│ • Multi-LLM Routing     │
 │ • Scrapetube RSS        │      │ • Headless Bio Scraper  │    │   (Ollama / DeepSeek)   │
-│ • 3x Gemini Key Rotation│      │ • Proxy Mesh Rotation   │    │ • Automated Email Outreach│
+│ • 3x Gemini Key Rotation│      │ • SQLite WAL Concurrency│    │ • Automated Outreach    │
 └─────────────────────────┘      └─────────────────────────┘    └─────────────────────────┘
+
 ```
+````
 
 ---
 
  ## License
 
- Add your project's license information here.
+ MIT License. See project repository for details.
 
  ## Disclaimer
 
