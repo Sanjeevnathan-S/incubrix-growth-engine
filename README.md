@@ -6,7 +6,7 @@
 
  ## 1\. Quick Start & Setup
 
-````
+
 ```bash
 # Clone the repository
 git clone https://github.com/Sanjeevnathan-S/incubrix-growth-engine.git
@@ -24,14 +24,14 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 ```
-````
+
 
 ---
 
  ## 2\. Project Architecture
 
-````
-```text
+
+```
 incubrix-lead-pipeline/
 ├── config/
 │   └── settings.py          # Global settings, 7 target GEOs, API key rotation configs
@@ -59,14 +59,13 @@ incubrix-lead-pipeline/
 └── README.md                    # System documentation
 
 ```
-````
+
 
 ---
 
  ## 3\. System Architecture & Workflow
 
-````
-```text
+```
                            +------------------------+
                            | Target Search Query    |
                            +------------------------+
@@ -107,7 +106,7 @@ incubrix-lead-pipeline/
                                           +------------------------------------+
 
 ```
-````
+
 
 ---
 
@@ -165,8 +164,8 @@ python main.py
 
  ## 7\. Failure Analysis & Risk Mitigations
 
-````
-```text
+
+```
                         Failure Point & Engineering Solution
 
     Detected Issue                Root Cause                 Pipeline Mitigation
@@ -186,14 +185,14 @@ python main.py
 └──────────────────────┘    └───────────────────────────┘    └────────────────────────────┘
 
 ```
-````
+
 
 ---
 
  ## 8\. Development Roadmap
 
-````
-```text
+
+```
                                 Product Roadmap
 
     Phase 1 (Current)                Phase 2 (Near-Term)            Phase 3 (Scale)
@@ -204,7 +203,7 @@ python main.py
 └─────────────────────────┘      └─────────────────────────┘    └─────────────────────────┘
 
 ```
-````
+
 
 ---
 
