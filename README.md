@@ -146,12 +146,11 @@ incubrix-lead-pipeline/
 
  ### Run Standard Discovery Loop
 
-````
+
 ```bash
 python main.py
 
 ```
-````
 
  ### Safe Interrupt & Export (`Ctrl+C`)
 
