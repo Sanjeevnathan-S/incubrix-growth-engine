@@ -1,0 +1,42 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+secrets.json
+*.pem
+*.key
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+
+# Databases & Runtime Cache
+*.sqlite
+*.sqlite3
+
+# Debug & Temporary Scripts
+temp.py
+scratch.py
+*.log
+
+# IDE & Editor Configurations
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Generated Junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
